@@ -28,7 +28,7 @@
     },
     "artifactsLocation": {
       "type": "string",
-      "defaultValue": "https://raw.githubusercontent.com/Azure/Azure-Network-Security/master/Lab%20Templates/Lab%20Template%20-%20NetSec%20Demo%20Lab/",
+      "defaultValue": "https://raw.githubusercontent.com/danielswart/Azure-Network-Security/master/Lab%20Templates/Lab%20Template%20-%20NetSec%20Demo%20Lab/",
       "metadata": {
         "description": "Path to the github repo or the storage account container"
       }
