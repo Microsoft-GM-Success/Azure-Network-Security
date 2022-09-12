@@ -15,8 +15,8 @@
       "name": "[parameters('resourceNames').appServicePlan]",
       "location": "[resourceGroup().location]",
       "sku": {
-        "Tier": "PremiumV2",
-        "Name": "P1v2"
+        "Tier": "ElasticPremium",
+        "Name": "EP1"
       },
       "kind": "linux",
       "properties": {
