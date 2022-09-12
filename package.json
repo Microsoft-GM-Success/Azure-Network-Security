@@ -27,12 +27,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Azure/Azure-Network-Security.git"
+    "url": "git+https://github.com/danielswart/Azure-Network-Security.git"
   },
   "author": "",
   "license": "",
   "bugs": {
-    "url": "https://github.com/Azure/Azure-Network-Security/issues"
+    "url": "https://github.com/danielswart/Azure-Network-Security/issues"
   },
-  "homepage": "https://github.com/Azure/Azure-Network-Security#readme"
+  "homepage": "https://github.com/danielswart/Azure-Network-Security#readme"
 }
