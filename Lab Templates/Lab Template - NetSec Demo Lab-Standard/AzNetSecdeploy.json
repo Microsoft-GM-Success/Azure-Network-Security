@@ -1574,8 +1574,8 @@
       "name": "[variables('Site-HPN')]",
       "location": "[resourceGroup().location]",
       "sku": {
-        "Tier": "IsolatedV2",
-        "Name": "I2v2"
+        "Tier": "PremiumV3",
+        "Name": "P3mv3"
       },
       "kind": "linux",
       "properties": {
