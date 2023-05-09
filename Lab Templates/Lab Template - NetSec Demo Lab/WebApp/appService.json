@@ -16,7 +16,7 @@
       "location": "[resourceGroup().location]",
       "sku": {
         "Tier": "PremiumV3",
-        "Name": "P1v3"
+        "Name": "P2v3"
       },
       "kind": "linux",
       "properties": {
