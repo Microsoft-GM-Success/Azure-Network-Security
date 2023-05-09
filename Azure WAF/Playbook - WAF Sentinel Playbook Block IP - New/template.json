@@ -16,30 +16,23 @@
                 "description": "Azure AD account to be used to create Logic App connections."
             }
         },
-        "roleNameGuid": {
-            "type": "string",
-            "defaultValue": "[newGuid()]",
+        "appgatewayID":{
+            "type":"string",
+            "defaultValue":"Null",
             "metadata": {
-                "description": "A new GUID used to identify the role assignment"
+                "description": "Resource ID of the application gateway that has the WAF policy deployed with it"
             }
         },
-        "appgatewayName":{
+        "frontdoorID":{
             "type":"string",
-            "defaultValue":"SOC-NS-AG-WAFv2",
+            "defaultValue":"Null",
             "metadata": {
-                "description": "Name of the application gateway that has the WAF policy deployed with it"
-            }
-        },
-        "frontdoorName":{
-            "type":"string",
-            "metadata": {
-                "description": "Name of the frontdoor instance that has the WAF policy deployed with it"
+                "description": "Resource ID of the frontdoor standard/premium instance that has the WAF policy deployed with it"
             }
         }
     },
     "variables": {
-        "AzureSentinelConnectionName": "[concat('azuresentinel-', parameters('PlaybookName'))]",
-        "NetworkContributorRole": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Authorization/roleDefinitions/', '4d97b98b-1d4f-4787-a291-c67834d212e7')]"
+        "AzureSentinelConnectionName": "[concat('azuresentinel-', parameters('PlaybookName'))]"
     },
     "resources": [
         {
@@ -55,32 +48,6 @@
                     "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/azuresentinel')]"
                 }
             }
-        },
-        {
-            "type": "Microsoft.Authorization/roleAssignments",
-            "dependsOn": [
-                "[resourceId('Microsoft.Logic/workflows', parameters('PlaybookName'))]"
-            ],
-            "apiVersion": "2018-09-01-preview",
-            "name": "[parameters('roleNameGuid')]",            
-            "properties": {
-                "roleDefinitionId": "[variables('NetworkContributorRole')]",
-                "principalId": "[reference(resourceId('Microsoft.Logic/workflows', parameters('PlaybookName')),'2019-05-01', 'full').identity.principalId]"
-            },
-            "scope": "[concat('Microsoft.Network/applicationgateways', '/', parameters('appgatewayName'))]"
-        },
-        {
-            "type": "Microsoft.Authorization/roleAssignments",
-            "dependsOn": [
-                "[resourceId('Microsoft.Logic/workflows', parameters('PlaybookName'))]"
-            ],
-            "apiVersion": "2018-09-01-preview",
-            "name": "[parameters('roleNameGuid')]",            
-            "properties": {
-                "roleDefinitionId": "[variables('NetworkContributorRole')]",
-                "principalId": "[reference(resourceId('Microsoft.Logic/workflows', parameters('PlaybookName')),'2019-05-01', 'full').identity.principalId]"
-            },
-            "scope": "[concat('Microsoft.Network/frontDoors', '/', parameters('frontdoorName'))]"
         },
         {
             "type": "Microsoft.Logic/workflows",
@@ -126,10 +93,10 @@
                         "Check_WAF_Type": {
                             "actions": {
                                 "For_each_5": {
-                                    "foreach": "@body('Parse_Front_Door')?['properties']?['frontendEndpoints']",
+                                    "foreach": "@body('Parse_Front_Door')?['value']",
                                     "actions": {
                                         "Add_Custom_Rules_to_Variable": {
-                                            "foreach": "@body('Parse_WAF_Policy')?['properties']?['customRules']?['rules']",
+                                            "foreach": "@body('Parse_WAF_Policy_Rules1')?['properties']?['customRules']?['rules']",
                                             "actions": {
                                                 "Check_for_Existing_SentinelBlockIP_Rule": {
                                                     "actions": {
@@ -226,16 +193,11 @@
                                                 }
                                             },
                                             "runAfter": {
-                                                "Parse_WAF_Policy": [
+                                                "Parse_WAF_Policy_Rules1": [
                                                     "Succeeded"
                                                 ]
                                             },
-                                            "type": "Foreach",
-                                            "runtimeConfiguration": {
-                                                "concurrency": {
-                                                    "repetitions": 1
-                                                }
-                                            }
+                                            "type": "Foreach"
                                         },
                                         "Check_for_SentinelBlockIP_Rule": {
                                             "actions": {},
@@ -319,7 +281,7 @@
                                             "type": "Compose",
                                             "inputs": "@variables('Rules')"
                                         },
-                                        "Get_WAF_Policy": {
+                                        "Get_WAF_Policy_Rules1": {
                                             "runAfter": {},
                                             "type": "Http",
                                             "inputs": {
@@ -327,18 +289,18 @@
                                                     "type": "ManagedServiceIdentity"
                                                 },
                                                 "method": "GET",
-                                                "uri": "https://management.azure.com@{items('For_each_5')?['properties']?['webApplicationFirewallPolicyLink']?['id']}?api-version=2019-10-01"
+                                                "uri": "https://management.azure.com@{items('For_each_5')?['properties']?['parameters']?['wafPolicy']?['id']}?api-version=2020-11-01"
                                             }
                                         },
-                                        "Parse_WAF_Policy": {
+                                        "Parse_WAF_Policy_Rules1": {
                                             "runAfter": {
-                                                "Get_WAF_Policy": [
+                                                "Get_WAF_Policy_Rules1": [
                                                     "Succeeded"
                                                 ]
                                             },
                                             "type": "ParseJson",
                                             "inputs": {
-                                                "content": "@body('Get_WAF_Policy')",
+                                                "content": "@body('Get_WAF_Policy_Rules1')",
                                                 "schema": {
                                                     "properties": {
                                                         "id": {
@@ -416,8 +378,8 @@
                                                                                 },
                                                                                 "required": [
                                                                                     "name",
-                                                                                    "priority",
                                                                                     "enabledState",
+                                                                                    "priority",
                                                                                     "ruleType",
                                                                                     "rateLimitDurationInMinutes",
                                                                                     "rateLimitThreshold",
@@ -432,6 +394,79 @@
                                                                     "type": "object"
                                                                 },
                                                                 "frontendEndpointLinks": {
+                                                                    "type": "array"
+                                                                },
+                                                                "managedRules": {
+                                                                    "properties": {
+                                                                        "managedRuleSets": {
+                                                                            "items": {
+                                                                                "properties": {
+                                                                                    "exclusions": {
+                                                                                        "type": "array"
+                                                                                    },
+                                                                                    "ruleGroupOverrides": {
+                                                                                        "type": "array"
+                                                                                    },
+                                                                                    "ruleSetAction": {
+                                                                                        "type": [
+                                                                                            "string",
+                                                                                            "null"
+                                                                                        ]
+                                                                                    },
+                                                                                    "ruleSetType": {
+                                                                                        "type": "string"
+                                                                                    },
+                                                                                    "ruleSetVersion": {
+                                                                                        "type": "string"
+                                                                                    }
+                                                                                },
+                                                                                "required": [
+                                                                                    "ruleSetType",
+                                                                                    "ruleSetVersion",
+                                                                                    "ruleSetAction",
+                                                                                    "ruleGroupOverrides",
+                                                                                    "exclusions"
+                                                                                ],
+                                                                                "type": "object"
+                                                                            },
+                                                                            "type": "array"
+                                                                        }
+                                                                    },
+                                                                    "type": "object"
+                                                                },
+                                                                "policySettings": {
+                                                                    "properties": {
+                                                                        "customBlockResponseBody": {},
+                                                                        "customBlockResponseStatusCode": {},
+                                                                        "enabledState": {
+                                                                            "type": [
+                                                                                "string",
+                                                                                "null"
+                                                                            ]
+                                                                        },
+                                                                        "mode": {
+                                                                            "type": "string"
+                                                                        },
+                                                                        "redirectUrl": {},
+                                                                        "requestBodyCheck": {
+                                                                            "type": [
+                                                                                "string",
+                                                                                "null"
+                                                                            ]
+                                                                        }
+                                                                    },
+                                                                    "type": "object"
+                                                                },
+                                                                "provisioningState": {
+                                                                    "type": "string"
+                                                                },
+                                                                "resourceState": {
+                                                                    "type": "string"
+                                                                },
+                                                                "routingRuleLinks": {
+                                                                    "type": "array"
+                                                                },
+                                                                "securityPolicyLinks": {
                                                                     "items": {
                                                                         "properties": {
                                                                             "id": {
@@ -444,114 +479,13 @@
                                                                         "type": "object"
                                                                     },
                                                                     "type": "array"
-                                                                },
-                                                                "managedRules": {
-                                                                    "properties": {
-                                                                        "managedRuleSets": {
-                                                                            "items": {
-                                                                                "properties": {
-                                                                                    "exclusions": {
-                                                                                        "items": {
-                                                                                            "properties": {
-                                                                                                "matchVariable": {
-                                                                                                    "type": "string"
-                                                                                                },
-                                                                                                "selector": {
-                                                                                                    "type": "string"
-                                                                                                },
-                                                                                                "selectorMatchOperator": {
-                                                                                                    "type": "string"
-                                                                                                }
-                                                                                            },
-                                                                                            "required": [
-                                                                                                "matchVariable",
-                                                                                                "selectorMatchOperator",
-                                                                                                "selector"
-                                                                                            ],
-                                                                                            "type": "object"
-                                                                                        },
-                                                                                        "type": "array"
-                                                                                    },
-                                                                                    "ruleGroupOverrides": {
-                                                                                        "items": {
-                                                                                            "properties": {
-                                                                                                "ruleGroupName": {
-                                                                                                    "type": "string"
-                                                                                                },
-                                                                                                "rules": {
-                                                                                                    "items": {
-                                                                                                        "properties": {
-                                                                                                            "action": {
-                                                                                                                "type": "string"
-                                                                                                            },
-                                                                                                            "enabledState": {
-                                                                                                                "type": "string"
-                                                                                                            },
-                                                                                                            "ruleId": {
-                                                                                                                "type": "string"
-                                                                                                            }
-                                                                                                        },
-                                                                                                        "required": [
-                                                                                                            "ruleId",
-                                                                                                            "enabledState"
-                                                                                                        ],
-                                                                                                        "type": "object"
-                                                                                                    },
-                                                                                                    "type": "array"
-                                                                                                }
-                                                                                            },
-                                                                                            "required": [
-                                                                                                "ruleGroupName",
-                                                                                                "rules"
-                                                                                            ],
-                                                                                            "type": "object"
-                                                                                        },
-                                                                                        "type": "array"
-                                                                                    },
-                                                                                    "ruleSetType": {
-                                                                                        "type": "string"
-                                                                                    },
-                                                                                    "ruleSetVersion": {
-                                                                                        "type": "string"
-                                                                                    }
-                                                                                },
-                                                                                "required": [
-                                                                                    "ruleSetType",
-                                                                                    "ruleSetVersion",
-                                                                                    "exclusions",
-                                                                                    "ruleGroupOverrides"
-                                                                                ],
-                                                                                "type": "object"
-                                                                            },
-                                                                            "type": "array"
-                                                                        }
-                                                                    },
-                                                                    "type": "object"
-                                                                },
-                                                                "policySettings": {
-                                                                    "properties": {
-                                                                        "customBlockResponseBody": {
-                                                                            "type": "string"
-                                                                        },
-                                                                        "customBlockResponseStatusCode": {
-                                                                            "type": "integer"
-                                                                        },
-                                                                        "enabledState": {
-                                                                            "type": "string"
-                                                                        },
-                                                                        "mode": {
-                                                                            "type": "string"
-                                                                        },
-                                                                        "redirectUrl": {
-                                                                            "type": "string"
-                                                                        }
-                                                                    },
-                                                                    "type": "object"
-                                                                },
-                                                                "provisioningState": {
-                                                                    "type": "string"
-                                                                },
-                                                                "resourceState": {
+                                                                }
+                                                            },
+                                                            "type": "object"
+                                                        },
+                                                        "sku": {
+                                                            "properties": {
+                                                                "name": {
                                                                     "type": "string"
                                                                 }
                                                             },
@@ -559,10 +493,10 @@
                                                         },
                                                         "tags": {
                                                             "properties": {
-                                                                "key1": {
+                                                                "createddate": {
                                                                     "type": "string"
                                                                 },
-                                                                "key2": {
+                                                                "owner": {
                                                                     "type": "string"
                                                                 }
                                                             },
@@ -588,20 +522,23 @@
                                                     "type": "ManagedServiceIdentity"
                                                 },
                                                 "body": {
-                                                    "id": "@{items('For_each_5')?['properties']?['webApplicationFirewallPolicyLink']?['id']}",
-                                                    "location": "@{body('Parse_WAF_Policy')?['location']}",
-                                                    "name": "@{body('Parse_WAF_Policy')?['name']}",
+                                                    "id": "@{items('For_each_5')?['properties']?['parameters']?['wafPolicy']?['id']}",
+                                                    "location": "@{body('Parse_WAF_Policy_Rules1')?['location']}",
+                                                    "name": "@{body('Parse_WAF_Policy_Rules1')?['name']}",
                                                     "properties": {
                                                         "customRules": {
                                                             "rules": "@outputs('Create_JSON_Rules_Object_from_Array')"
                                                         },
-                                                        "managedRules": "@body('Parse_WAF_Policy')?['properties']?['managedRules']",
-                                                        "policySettings": "@body('Parse_WAF_Policy')?['properties']?['policySettings']"
+                                                        "managedRules": "@body('Parse_WAF_Policy_Rules1')?['properties']?['managedRules']",
+                                                        "policySettings": "@body('Parse_WAF_Policy_Rules1')?['properties']?['policySettings']"
                                                     },
-                                                    "type": "@{body('Parse_WAF_Policy')?['type']}"
+                                                    "sku": {
+                                                        "name": "@{body('Parse_WAF_Policy_Rules1')?['sku']?['name']}"
+                                                    },
+                                                    "type": "@{body('Parse_WAF_Policy_Rules1')?['type']}"
                                                 },
                                                 "method": "PUT",
-                                                "uri": "https://management.azure.com@{items('For_each_5')?['properties']?['webApplicationFirewallPolicyLink']?['id']}?api-version=2019-10-01"
+                                                "uri": "https://management.azure.com@{items('For_each_5')?['properties']?['parameters']?['wafPolicy']?['id']}?api-version=2020-11-01"
                                             }
                                         }
                                     },
@@ -625,7 +562,7 @@
                                             "type": "ManagedServiceIdentity"
                                         },
                                         "method": "GET",
-                                        "uri": "https://management.azure.com@{variables('ResourceID2')}?api-version=2019-05-01"
+                                        "uri": "https://management.azure.com@{variables('ResourceID2')}/securityPolicies?api-version=2021-06-01"
                                     }
                                 },
                                 "Parse_Front_Door": {
@@ -639,147 +576,62 @@
                                         "content": "@body('Get_Front_Door')",
                                         "schema": {
                                             "properties": {
-                                                "id": {
-                                                    "type": "string"
-                                                },
-                                                "location": {
-                                                    "type": "string"
-                                                },
-                                                "name": {
-                                                    "type": "string"
-                                                },
-                                                "properties": {
-                                                    "properties": {
-                                                        "backendPools": {
-                                                            "items": {
-                                                                "properties": {
-                                                                    "id": {
-                                                                        "type": "string"
-                                                                    },
-                                                                    "name": {
-                                                                        "type": "string"
-                                                                    },
-                                                                    "properties": {
-                                                                        "properties": {
-                                                                            "backends": {
-                                                                                "items": {
-                                                                                    "properties": {
-                                                                                        "address": {
-                                                                                            "type": "string"
-                                                                                        },
-                                                                                        "backendHostHeader": {
-                                                                                            "type": "string"
-                                                                                        },
-                                                                                        "enabledState": {
-                                                                                            "type": "string"
-                                                                                        },
-                                                                                        "httpPort": {
-                                                                                            "type": "integer"
-                                                                                        },
-                                                                                        "httpsPort": {
-                                                                                            "type": "integer"
-                                                                                        },
-                                                                                        "priority": {
-                                                                                            "type": "integer"
-                                                                                        },
-                                                                                        "weight": {
-                                                                                            "type": "integer"
-                                                                                        }
-                                                                                    },
-                                                                                    "required": [
-                                                                                        "address",
-                                                                                        "httpPort",
-                                                                                        "httpsPort",
-                                                                                        "priority",
-                                                                                        "weight",
-                                                                                        "backendHostHeader",
-                                                                                        "enabledState"
-                                                                                    ],
-                                                                                    "type": "object"
-                                                                                },
-                                                                                "type": "array"
-                                                                            },
-                                                                            "healthProbeSettings": {
-                                                                                "properties": {
-                                                                                    "id": {
-                                                                                        "type": "string"
-                                                                                    }
-                                                                                },
-                                                                                "type": "object"
-                                                                            },
-                                                                            "loadBalancingSettings": {
-                                                                                "properties": {
-                                                                                    "id": {
-                                                                                        "type": "string"
-                                                                                    }
-                                                                                },
-                                                                                "type": "object"
-                                                                            },
-                                                                            "resourceState": {
-                                                                                "type": "string"
-                                                                            }
-                                                                        },
-                                                                        "type": "object"
-                                                                    },
-                                                                    "type": {
-                                                                        "type": "string"
-                                                                    }
-                                                                },
-                                                                "required": [
-                                                                    "id",
-                                                                    "name",
-                                                                    "type",
-                                                                    "properties"
-                                                                ],
-                                                                "type": "object"
+                                                "value": {
+                                                    "items": {
+                                                        "properties": {
+                                                            "id": {
+                                                                "type": "string"
                                                             },
-                                                            "type": "array"
-                                                        },
-                                                        "backendPoolsSettings": {
+                                                            "name": {
+                                                                "type": "string"
+                                                            },
                                                             "properties": {
-                                                                "enforceCertificateNameCheck": {
-                                                                    "type": "string"
-                                                                },
-                                                                "sendRecvTimeoutSeconds": {}
-                                                            },
-                                                            "type": "object"
-                                                        },
-                                                        "cName": {
-                                                            "type": "string"
-                                                        },
-                                                        "enabledState": {
-                                                            "type": "string"
-                                                        },
-                                                        "friendlyName": {
-                                                            "type": "string"
-                                                        },
-                                                        "frontendEndpoints": {
-                                                            "items": {
                                                                 "properties": {
-                                                                    "id": {
+                                                                    "deploymentStatus": {
                                                                         "type": "string"
                                                                     },
-                                                                    "name": {
-                                                                        "type": "string"
-                                                                    },
-                                                                    "properties": {
+                                                                    "parameters": {
                                                                         "properties": {
-                                                                            "customHttpsConfiguration": {},
-                                                                            "customHttpsProvisioningState": {},
-                                                                            "customHttpsProvisioningSubstate": {},
-                                                                            "hostName": {
+                                                                            "associations": {
+                                                                                "items": {
+                                                                                    "properties": {
+                                                                                        "domains": {
+                                                                                            "items": {
+                                                                                                "properties": {
+                                                                                                    "id": {
+                                                                                                        "type": "string"
+                                                                                                    },
+                                                                                                    "isActive": {
+                                                                                                        "type": "boolean"
+                                                                                                    }
+                                                                                                },
+                                                                                                "required": [
+                                                                                                    "isActive",
+                                                                                                    "id"
+                                                                                                ],
+                                                                                                "type": "object"
+                                                                                            },
+                                                                                            "type": "array"
+                                                                                        },
+                                                                                        "patternsToMatch": {
+                                                                                            "items": {
+                                                                                                "type": "string"
+                                                                                            },
+                                                                                            "type": "array"
+                                                                                        }
+                                                                                    },
+                                                                                    "required": [
+                                                                                        "domains",
+                                                                                        "patternsToMatch"
+                                                                                    ],
+                                                                                    "type": "object"
+                                                                                },
+                                                                                "type": "array"
+                                                                            },
+                                                                            "type": {
                                                                                 "type": "string"
                                                                             },
-                                                                            "resourceState": {
-                                                                                "type": "string"
-                                                                            },
-                                                                            "sessionAffinityEnabledState": {
-                                                                                "type": "string"
-                                                                            },
-                                                                            "sessionAffinityTtlSeconds": {
-                                                                                "type": "integer"
-                                                                            },
-                                                                            "webApplicationFirewallPolicyLink": {
+                                                                            "wafPolicy": {
                                                                                 "properties": {
                                                                                     "id": {
                                                                                         "type": "string"
@@ -790,202 +642,25 @@
                                                                         },
                                                                         "type": "object"
                                                                     },
-                                                                    "type": {
+                                                                    "provisioningState": {
                                                                         "type": "string"
                                                                     }
                                                                 },
-                                                                "required": [
-                                                                    "id",
-                                                                    "name",
-                                                                    "type",
-                                                                    "properties"
-                                                                ],
                                                                 "type": "object"
                                                             },
-                                                            "type": "array"
+                                                            "type": {
+                                                                "type": "string"
+                                                            }
                                                         },
-                                                        "healthProbeSettings": {
-                                                            "items": {
-                                                                "properties": {
-                                                                    "id": {
-                                                                        "type": "string"
-                                                                    },
-                                                                    "name": {
-                                                                        "type": "string"
-                                                                    },
-                                                                    "properties": {
-                                                                        "properties": {
-                                                                            "enabledState": {
-                                                                                "type": "string"
-                                                                            },
-                                                                            "healthProbeMethod": {
-                                                                                "type": "string"
-                                                                            },
-                                                                            "intervalInSeconds": {
-                                                                                "type": "integer"
-                                                                            },
-                                                                            "path": {
-                                                                                "type": "string"
-                                                                            },
-                                                                            "protocol": {
-                                                                                "type": "string"
-                                                                            },
-                                                                            "resourceState": {
-                                                                                "type": "string"
-                                                                            }
-                                                                        },
-                                                                        "type": "object"
-                                                                    },
-                                                                    "type": {
-                                                                        "type": "string"
-                                                                    }
-                                                                },
-                                                                "required": [
-                                                                    "id",
-                                                                    "name",
-                                                                    "type",
-                                                                    "properties"
-                                                                ],
-                                                                "type": "object"
-                                                            },
-                                                            "type": "array"
-                                                        },
-                                                        "loadBalancingSettings": {
-                                                            "items": {
-                                                                "properties": {
-                                                                    "id": {
-                                                                        "type": "string"
-                                                                    },
-                                                                    "name": {
-                                                                        "type": "string"
-                                                                    },
-                                                                    "properties": {
-                                                                        "properties": {
-                                                                            "additionalLatencyMilliseconds": {
-                                                                                "type": "integer"
-                                                                            },
-                                                                            "resourceState": {
-                                                                                "type": "string"
-                                                                            },
-                                                                            "sampleSize": {
-                                                                                "type": "integer"
-                                                                            },
-                                                                            "successfulSamplesRequired": {
-                                                                                "type": "integer"
-                                                                            }
-                                                                        },
-                                                                        "type": "object"
-                                                                    },
-                                                                    "type": {
-                                                                        "type": "string"
-                                                                    }
-                                                                },
-                                                                "required": [
-                                                                    "id",
-                                                                    "name",
-                                                                    "type",
-                                                                    "properties"
-                                                                ],
-                                                                "type": "object"
-                                                            },
-                                                            "type": "array"
-                                                        },
-                                                        "provisioningState": {
-                                                            "type": "string"
-                                                        },
-                                                        "resourceState": {
-                                                            "type": "string"
-                                                        },
-                                                        "routingRules": {
-                                                            "items": {
-                                                                "properties": {
-                                                                    "id": {
-                                                                        "type": "string"
-                                                                    },
-                                                                    "name": {
-                                                                        "type": "string"
-                                                                    },
-                                                                    "properties": {
-                                                                        "properties": {
-                                                                            "acceptedProtocols": {
-                                                                                "items": {
-                                                                                    "type": "string"
-                                                                                },
-                                                                                "type": "array"
-                                                                            },
-                                                                            "enabledState": {
-                                                                                "type": "string"
-                                                                            },
-                                                                            "frontendEndpoints": {
-                                                                                "items": {
-                                                                                    "properties": {
-                                                                                        "id": {
-                                                                                            "type": "string"
-                                                                                        }
-                                                                                    },
-                                                                                    "required": [
-                                                                                        "id"
-                                                                                    ],
-                                                                                    "type": "object"
-                                                                                },
-                                                                                "type": "array"
-                                                                            },
-                                                                            "patternsToMatch": {
-                                                                                "items": {
-                                                                                    "type": "string"
-                                                                                },
-                                                                                "type": "array"
-                                                                            },
-                                                                            "resourceState": {
-                                                                                "type": "string"
-                                                                            },
-                                                                            "routeConfiguration": {
-                                                                                "properties": {
-                                                                                    "@@odata.type": {
-                                                                                        "type": "string"
-                                                                                    },
-                                                                                    "backendPool": {
-                                                                                        "properties": {
-                                                                                            "id": {
-                                                                                                "type": "string"
-                                                                                            }
-                                                                                        },
-                                                                                        "type": "object"
-                                                                                    },
-                                                                                    "cacheConfiguration": {},
-                                                                                    "customForwardingPath": {},
-                                                                                    "forwardingProtocol": {
-                                                                                        "type": "string"
-                                                                                    }
-                                                                                },
-                                                                                "type": "object"
-                                                                            }
-                                                                        },
-                                                                        "type": "object"
-                                                                    },
-                                                                    "type": {
-                                                                        "type": "string"
-                                                                    }
-                                                                },
-                                                                "required": [
-                                                                    "id",
-                                                                    "name",
-                                                                    "type",
-                                                                    "properties"
-                                                                ],
-                                                                "type": "object"
-                                                            },
-                                                            "type": "array"
-                                                        }
+                                                        "required": [
+                                                            "id",
+                                                            "type",
+                                                            "name",
+                                                            "properties"
+                                                        ],
+                                                        "type": "object"
                                                     },
-                                                    "type": "object"
-                                                },
-                                                "tags": {
-                                                    "properties": {},
-                                                    "type": "object"
-                                                },
-                                                "type": {
-                                                    "type": "string"
+                                                    "type": "array"
                                                 }
                                             },
                                             "type": "object"
@@ -2163,7 +1838,7 @@
                                     {
                                         "contains": [
                                             "@variables('ResourceID2')",
-                                            "frontdoors"
+                                            "profiles"
                                         ]
                                     }
                                 ]
@@ -2228,7 +1903,7 @@
                                     {
                                         "name": "ResourceID1",
                                         "type": "string",
-                                        "value": "null"
+                                        "value": "[parameters('appgatewayID')]"
                                     }
                                 ]
                             }
@@ -2245,7 +1920,7 @@
                                     {
                                         "name": "ResourceID2",
                                         "type": "string",
-                                        "value": "null"
+                                        "value": "[parameters('frontdoorID')]"
                                     }
                                 ]
                             }
