@@ -1574,8 +1574,8 @@
       "name": "[variables('Site-HPN')]",
       "location": "[resourceGroup().location]",
       "sku": {
-        "Tier": "PremiumV2",
-        "Name": "P1v2"
+        "Tier": "PremiumV3",
+        "Name": "P3mv3"
       },
       "kind": "linux",
       "properties": {
@@ -1660,7 +1660,7 @@
       ],
       "properties": {
         "hardwareProfile": {
-          "vmSize": "Standard_D2s_v3"
+          "vmSize": "Standard_D2s_v4"
         },
         "storageProfile": {
           "osDisk": {
@@ -1710,7 +1710,7 @@
       },
       "properties": {
         "hardwareProfile": {
-          "vmSize": "Standard_D2s_v3"
+          "vmSize": "Standard_D2s_v4"
         },
         "storageProfile": {
           "osDisk": {
@@ -1751,7 +1751,7 @@
       ],
       "properties": {
         "hardwareProfile": {
-          "vmSize": "Standard_D2s_v3"
+          "vmSize": "Standard_D2s_v4"
         },
         "storageProfile": {
           "osDisk": {
